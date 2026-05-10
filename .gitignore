@@ -64,6 +64,8 @@ res/stops.json
 res/routes.txt
 res/stops.txt
 res/google_transit/
+res/.DS_Store
+src/.DS_Store
 .translink_info/
 src/__pycache__/
 *.pyc
