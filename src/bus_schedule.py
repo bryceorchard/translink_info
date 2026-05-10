@@ -6,12 +6,13 @@ from PySide6.QtWidgets import (QWidget, QDialog, QVBoxLayout, QHBoxLayout,
 from PySide6.QtCore import QUrl, Slot
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage
-from PySide6.QtGui import QPalette, QIcon
+from PySide6.QtGui import QPalette, QIcon, QColor
 
 from custom_widgets import ErrorLineEdit
 # ErrorLineEdit is a version of QLineEdit which allows 
 # setting of the placeholder text to an error message
 from custom_functions import get_schedule
+from download_and_parse_static_data import main as parse_main
 # lotta imports sorryyyy
 
 DIRECTORY = os.path.dirname(os.path.realpath(__file__))[:-4] # Current file directory
@@ -83,27 +84,31 @@ class Form(QWidget):
         """ Calls get_schedule, which returns the next bus as a string. If the api request is 
             invalid, returns an error code for processing
         """
-            
-        palette = QPalette().setColor(QPalette.PlaceholderText, 'red')
+        
+        palette = QPalette()
+        palette.setColor(QPalette.PlaceholderText, QColor("red"))
         
         times = get_schedule(self.stop_form.text(), self.bus_form.text(), KEY)
         if not isinstance(times, list):
         # If the time is not a list of times
             match times:
-                case '3001':
-                    self.stop_form.setPlaceholderText("Invalid Stop Number")
+                case 'stop and route do not exist':
+                    self.stop_form.setPlaceholderText("Stop Number Not Found")
+                    self.bus_form.setPlaceholderText("Route Number Not Found")
                     self.stop_form.setPalette(palette)
+                    self.bus_form.setPalette(palette)
                     self.stop_form.clear()
+                    self.bus_form.clear()
                     return
                 
-                case '3002':
+                case 'stop does not exist':
                     self.stop_form.setPlaceholderText("Stop Number Not Found")
                     self.stop_form.setPalette(palette)
                     self.stop_form.clear()
                     return
                 
-                case '3004':
-                    self.bus_form.setPlaceholderText("Invalid Route Number")
+                case 'route does not exist':
+                    self.bus_form.setPlaceholderText("Route Number Not Found")
                     self.bus_form.setPalette(palette)
                     self.bus_form.clear()
                     return
@@ -138,6 +143,7 @@ class MainWindow(QDialog):
 def main():
     """ Creates the initial window and starts the program loop
     """
+    parse_main() # Parse the static data to get the stops and routes information (if it hasn't already been parsed)
     app = QApplication([])
     
     form = Form()
@@ -148,7 +154,7 @@ def main():
     @Slot()
     def delete_file():
         try:
-            os.remove(os.path.join(DIRECTORY, 'res', 'schedule.json'))
+            os.remove(os.path.join(DIRECTORY, 'res', 'api_response.json'))
         except FileNotFoundError:
             pass
 

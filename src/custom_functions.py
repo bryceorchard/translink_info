@@ -1,62 +1,84 @@
 import requests
+from google.transit import gtfs_realtime_pb2
 import json
+import time
 import os
-DIRECTORY = os.path.dirname(os.path.realpath(__file__))[:-4]
-
-with open(os.path.join(DIRECTORY, "res", "stops.txt"), 'r') as stops_txt:
-    stops = [stop[:-1] for stop in stops_txt.readlines()]
-with open(os.path.join(DIRECTORY, "res", "routes.txt"), 'r') as routes_txt:
-    routes = [route[:-1] for route in routes_txt.readlines()]
 
 def get_schedule(stop, route, key) -> list | str:
     """ Retrieves bus schedule information from the TransLink API
     """
-    schedule = requests.get(f"http://api.translink.ca/rttiapi/v1/stops/{stop}/estimates?apikey={key}&routeNo={route}",
-                            headers={'accept': 'application/JSON'})
-    try:
-        sjson = schedule.json()[0]
-        # The API returns all of the JSON within a single list, so we must
-        # access the first element to get the full JSON
-    except:
-        try:
-            return schedule.json()['Code']
-            # In the case of an error, we can access the error code
-        except TypeError:
-            # If no error code is generated from the api (json is blank)
-            # Manually check inputs
-            if stop not in stops:
-                return '3002'
-            if route not in routes:
-                return '3004'
-            return '3001'
 
-    with open(os.path.join(DIRECTORY, 'res', 'schedule.json'), 'w') as file:
-        json.dump(sjson, file, indent=4)
-        # Write the API return to a JSON file in /res
+    DIRECTORY = os.path.dirname(os.path.realpath(__file__))[:-4]
 
+    with open(os.path.join(DIRECTORY, "res", "stops.json"), 'r') as file:
+        stops = json.load(file)
+    with open(os.path.join(DIRECTORY, "res", "routes.json"), 'r') as file:
+        routes = json.load(file)
+
+
+    url = "https://gtfsapi.translink.ca/v3/gtfsrealtime"
+    response = requests.get(url, params={"apikey": key}, timeout=10)
+    response.raise_for_status()
+
+    feed = gtfs_realtime_pb2.FeedMessage()
+    feed.ParseFromString(response.content)
+
+    with open(os.path.join(DIRECTORY, 'res', 'api_response.json'), 'w') as file:
+        file.write(str(feed))
+
+    stop_exists = False
+    for key, value in stops.items():
+        if key == stop:
+            stop_id = value
+            stop_exists = True
+
+    route_exists = False
+    for key, value in routes.items():
+        if key == route:
+            route_id = value
+            route_exists = True
+
+    if not stop_exists and not route_exists:
+        return 'stop and route do not exist'
+    if not stop_exists:
+        return 'stop does not exist'
+    if not route_exists:
+        return 'route does not exist'
+
+    stop_id = stops[stop]
+    route_id = routes[route]
+    
+    route_exists = False
+
+    count = 0
     times = []
 
-    # Loop through the next three bus times
-    for i in range(0, 3):
-        text = 'Next bus in' if i == 0 else 'In'
-        data = sjson['Schedules'][i]
-        # Access the corresponding upcoming buses
+    for entity in feed.entity:
+        if not entity.HasField("trip_update"):
+            continue
+        trip_update = entity.trip_update
+        trip = trip_update.trip
+        if trip.route_id != route_id:
+            continue
+        for stop_time_update in trip_update.stop_time_update:
+            if stop_time_update.stop_id != stop_id:
+                continue
 
-        expected_countdown = data['ExpectedCountdown']
-        m_index = data['ExpectedLeaveTime'].index('m')
-        # Index of the 'm' in pm/am
-        expected_leave_time = data['ExpectedLeaveTime'][:m_index + 1]
-        # Remove the pm/am from the time
-        status = data['ScheduleStatus']
-        times.append(
-            f"{text} {expected_countdown} minute{'s' if expected_countdown != 1 else ''} "
-            f"at {expected_leave_time}")
-        match status:
-            case '*':
+            route_exists = True
+            text = 'Next bus in' if count == 0 else 'In'
+            expected_arrival_time = int((int(stop_time_update.arrival.time) - time.time())//60)
+            delay = int(int(stop_time_update.arrival.delay)//60)
+
+            times.append(f"{text} {expected_arrival_time} minute{'s' if expected_arrival_time != 1 else ''}")
+            if delay == 0:
                 times.append(" - On time")
-            case '-':
-                times.append(" - Late")
-            case '+':
-                times.append(" - Early")
-        
+            if delay < 0:
+                times.append(f" - Early by {delay*-1} minute{'s' if delay != -1 else ''}")
+            if delay > 0:
+                times.append(f" - Late by {delay} minute{'s' if delay != 1 else ''}")
+            count+=1
+        if count == 3:
+            break
+    if not route_exists:
+        return 'route does not exist'
     return times
