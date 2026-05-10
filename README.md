@@ -18,6 +18,6 @@ gtfs-realtime-bindings
 > #### Execute main.py
 
 ## Preview
-![Homepage](imgaes/homepage.png)
-![invalid_input](imgaes/invalid_input.png)
-![bus_times](imgaes/bus_times.png)
+![Homepage](images/homepage.png)
+![invalid_input](images/invalid_input.png)
+![bus_times](images/bus_times.png)
