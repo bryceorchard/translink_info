@@ -59,5 +59,6 @@ tmbootpicker.efi
 # Project Specific files
 routes.json
 stops.json
-__pycache__
-.translink_info
+.translink_info/
+__pycache__/
+*.pyc
